@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <mujoco>
     <asset>
-        <mesh file="banana.stl" name="banana"></mesh>
+        <mesh file="banana.stl" name="banana"/>
     </asset>
     <worldbody>
         <body name="box" pos="0 0 0.2">

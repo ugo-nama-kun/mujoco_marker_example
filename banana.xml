@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<mujoco>
+    <asset>
+        <mesh file="banana_small.stl" name="banana"></mesh>
+    </asset>
+    <worldbody>
+        <body name="floor" pos="0 0 0.025">
+            <geom size="1.0 1.0 0.02" rgba="0 1 0 1" type="box"/>
+        </body>
+    </worldbody>
+</mujoco>

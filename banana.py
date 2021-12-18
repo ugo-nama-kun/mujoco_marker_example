@@ -17,6 +17,8 @@ while True:
     viewer.add_marker(pos=np.array([np.cos(t), np.sin(t), 1.0]),
                       type=const.GEOM_MESH,
                       rgba=(1, 1, 0, 1),
+                      specular=100,
+                      emission=0.1,
                       dataid=0)
     viewer.render()
 

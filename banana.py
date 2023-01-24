@@ -2,20 +2,26 @@ import math
 import time
 import os
 import numpy as np
-from mujoco_py import load_model_from_path, MjSim, MjViewer
-from mujoco_py.generated import const
 
+import mujoco
+import mujoco_viewer  # https://github.com/rohanpsingh/mujoco-python-viewer
 
 xml_path = 'model/banana.xml'
-model = load_model_from_path(xml_path)
-sim = MjSim(model)
-viewer = MjViewer(sim)
+ASSETS = dict()
+
+model = mujoco.MjModel.from_xml_path(xml_path, ASSETS)
+data = mujoco.MjData(model)
+
+viewer = mujoco_viewer.MujocoViewer(model, data)
+viewer.cam.distance = 5.0  # set distance
+
+mujoco.mj_step(model, data)
 step = 0
-while True:
+for _ in range(300):
     t = time.time()
     x, y = math.cos(t), math.sin(t)
     viewer.add_marker(pos=np.array([np.cos(t), np.sin(t), 1.0]),
-                      type=const.GEOM_MESH,
+                      type=mujoco.mjtGeom.mjGEOM_MESH,
                       rgba=(1, 1, 0, 1),
                       specular=100,
                       emission=0.1,
@@ -25,3 +31,5 @@ while True:
     step += 1
     if step > 100 and os.getenv('TESTING') is not None:
         break
+
+viewer.close()

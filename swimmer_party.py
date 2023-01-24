@@ -1,14 +1,19 @@
 import numpy as np
-from gym.envs.mujoco import SwimmerEnv
-from mujoco_py.generated import const
 
+from mujoco_py import const
+from gymnasium.envs.mujoco import SwimmerEnv
 
 N = 9
+
 
 class SwimmerMarkerEnv(SwimmerEnv):
 
     def render(self, **kwargs):
         if self.viewer:
+            # Clear all previous markers
+            self.viewer._markers[:] = []
+            self.viewer._overlay.clear()
+
             # Draw a sphere marker
             for i in range(N):
                 for j in range(N):
@@ -23,12 +28,28 @@ class SwimmerMarkerEnv(SwimmerEnv):
                                                rgba=rgba)
 
         # Default swimmer renderer method
-        super(SwimmerMarkerEnv, self).render()
+        return super(SwimmerMarkerEnv, self).render()
+        
+    def viewer_setup(self):  # Avoid NotImplementedError
+        pass
 
 
 if __name__ == '__main__':
+    MATPLOTLIB = True  # Toggle whether rgb image render or using default viewer
+    
+    if MATPLOTLIB:
+        import matplotlib.pyplot as plt
+    
     # Run
-    env = SwimmerMarkerEnv()
-    while True:
+    env = SwimmerMarkerEnv(render_mode="human" if not MATPLOTLIB else "rgb_array")
+    for _ in range(100):
         env.step(env.action_space.sample())
-        env.render()
+        
+        im = env.render()
+        
+        if MATPLOTLIB:
+            plt.clf()
+            plt.imshow(im)
+            plt.pause(0.0001)
+    
+    env.close()

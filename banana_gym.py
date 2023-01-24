@@ -1,50 +1,53 @@
 import math
 import time
 
-import mujoco_py
 import numpy as np
-from gym import utils
-from gym.envs.mujoco import MujocoEnv
-from mujoco_py.generated import const
+
+import mujoco
+from gymnasium import utils
+from gymnasium.envs.mujoco import MujocoEnv
+from gymnasium.spaces import Box
+
+# Reference implementation
+# from gymnasium.envs.mujoco.ant_v4 import AntEnv
+
+DEFAULT_CAMERA_CONFIG = {
+    "distance": 4.0,
+}
 
 
-class CustomMujocoEnv(MujocoEnv):
-    """Superclass for all MuJoCo environments."""
-
-    def __init__(self, model_path, frame_skip):
-        fullpath = model_path
-
-        self.frame_skip = frame_skip
-        self.model = mujoco_py.load_model_from_path(fullpath)
-        self.sim = mujoco_py.MjSim(self.model)
-        self.data = self.sim.data
-        self.viewer = None
-        self._viewers = {}
-
-        self.metadata = {
-            "render.modes": ["human", "rgb_array", "depth_array"],
-            "video.frames_per_second": int(np.round(1.0 / self.dt)),
-        }
-
-        self.init_qpos = self.sim.data.qpos.ravel().copy()
-        self.init_qvel = self.sim.data.qvel.ravel().copy()
-
-        self._set_action_space()
-
-        action = self.action_space.sample()
-        observation, _reward, done, _info = self.step(action)
-        assert not done
-
-        self._set_observation_space(observation)
-
-        self.seed()
-
-
-class BananaAntEnv(CustomMujocoEnv, utils.EzPickle):
-    def __init__(self):
-        CustomMujocoEnv.__init__(self, "model/banana_ant.xml", 5)
-        utils.EzPickle.__init__(self)
-
+class BananaAntEnv(MujocoEnv, utils.EzPickle):
+    metadata = {
+        "render_modes": [
+            "human",
+            "rgb_array",
+            "depth_array",
+        ],
+        "render_fps"  : 20,
+    }
+    
+    def __init__(self, xml_path, **kwargs):
+        utils.EzPickle.__init__(
+            self,
+            xml_path,
+            **kwargs
+        )
+        
+        obs_shape = 27
+        
+        observation_space = Box(
+            low=-np.inf, high=np.inf, shape=(obs_shape,), dtype=np.float64
+        )
+        
+        MujocoEnv.__init__(
+            self,
+            xml_path,
+            5,
+            observation_space=observation_space,
+            default_camera_config=DEFAULT_CAMERA_CONFIG,
+            **kwargs
+        )
+    
     def step(self, a):
         xposbefore = self.get_body_com("torso")[0]
         self.do_simulation(a, self.frame_skip)
@@ -52,18 +55,19 @@ class BananaAntEnv(CustomMujocoEnv, utils.EzPickle):
         forward_reward = (xposafter - xposbefore) / self.dt
         ctrl_cost = 0.5 * np.square(a).sum()
         contact_cost = (
-                0.5 * 1e-3 * np.sum(np.square(np.clip(self.sim.data.cfrc_ext, -1, 1)))
+                0.5 * 1e-3 * np.sum(np.square(np.clip(self.data.cfrc_ext, -1, 1)))
         )
         survive_reward = 1.0
         reward = forward_reward - ctrl_cost - contact_cost + survive_reward
         state = self.state_vector()
         notdone = np.isfinite(state).all() and state[2] >= 0.2 and state[2] <= 1.0
-        done = not notdone
+        terminated = not notdone
         ob = self._get_obs()
         return (
             ob,
             reward,
-            done,
+            terminated,
+            False,
             dict(
                 reward_forward=forward_reward,
                 reward_ctrl=-ctrl_cost,
@@ -71,16 +75,16 @@ class BananaAntEnv(CustomMujocoEnv, utils.EzPickle):
                 reward_survive=survive_reward,
             ),
         )
-
+    
     def _get_obs(self):
         return np.concatenate(
             [
-                self.sim.data.qpos.flat[2:],
-                self.sim.data.qvel.flat,
-                np.clip(self.sim.data.cfrc_ext, -1, 1).flat,
+                self.data.qpos.flat[2:],
+                self.data.qvel.flat,
+                np.clip(self.data.cfrc_ext, -1, 1).flat,
             ]
         )
-
+    
     def reset_model(self):
         qpos = self.init_qpos + self.np_random.uniform(
             size=self.model.nq, low=-0.1, high=0.1
@@ -88,27 +92,55 @@ class BananaAntEnv(CustomMujocoEnv, utils.EzPickle):
         qvel = self.init_qvel + self.np_random.randn(self.model.nv) * 0.1
         self.set_state(qpos, qvel)
         return self._get_obs()
-
-    def viewer_setup(self):
-        self.viewer.cam.distance = self.model.stat.extent * 0.5
-
+    
     def render(self, **kwargs):
-        if self.viewer:
+        viewer = self.mujoco_renderer.viewer
+        if viewer:
+            viewer.cam.distance = self.model.stat.extent
+            
+            # Clear all previous markers
+            viewer._markers[:] = []
+            
             t = time.time()
             x, y = 2 * math.cos(t), 2 * math.sin(t)
-            self.viewer.add_marker(pos=np.array([x, y, 1]),
-                                   label=" ",
-                                   type=const.GEOM_MESH,
-                                   rgba=(1, 1, 0, 1),
-                                   dataid=0)
-
-        # Default renderer method
-        super(BananaAntEnv, self).render()
+            viewer.add_marker(
+                pos=np.array([x, y, 1]),
+                label=" ",
+                type=mujoco.mjtGeom.mjGEOM_MESH,
+                rgba=(1, 1, 0, 1),
+                dataid=0
+            )
+        
+        return super().render()
+    
+    def close(self):
+        if self.mujoco_renderer is not None:
+            self.mujoco_renderer.close()
 
 
 if __name__ == '__main__':
+    MATPLOTLIB = False  # Toggle whether rgb image render or using default viewer
+    if MATPLOTLIB:
+        import matplotlib.pyplot as plt
+
+    xml_path = "your_path_to/model/banana_ant.xml"
+    
     # Run
-    env = BananaAntEnv()
-    while True:
-        env.step(env.action_space.sample())
+    for i in range(3):
+        env = BananaAntEnv(
+            xml_path=xml_path,
+            render_mode="human" if not MATPLOTLIB else "rgb_array"
+        )
         env.render()
+
+        for _ in range(100):
+            env.step(env.action_space.sample())
+            im = env.render()
+
+            if MATPLOTLIB:
+                plt.clf()
+                plt.imshow(im)
+                plt.pause(0.0001)
+
+        # TODO: Getting warnings in "human" render_mode. Experiment progresses without the termination.
+        env.close()

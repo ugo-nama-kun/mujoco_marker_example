@@ -6,8 +6,10 @@ import math
 import time
 import os
 import numpy as np
-from mujoco_py import load_model_from_xml, MjSim, MjViewer
-from mujoco_py.generated import const
+
+import mujoco
+import mujoco_viewer  # https://github.com/rohanpsingh/mujoco-python-viewer
+
 from scipy.spatial.transform import Rotation
 
 MODEL_XML = """
@@ -32,14 +34,21 @@ def euler2mat(euler):
     return r.as_matrix()
 
 
-model = load_model_from_xml(MODEL_XML)
-sim = MjSim(model)
-viewer = MjViewer(sim)
+ASSETS = dict()
+
+model = mujoco.MjModel.from_xml_string(MODEL_XML, ASSETS)
+data = mujoco.MjData(model)
+
+viewer = mujoco_viewer.MujocoViewer(model, data)
+viewer.cam.distance = 5.0  # set distance
+
+mujoco.mj_step(model, data)
+
 step = 0
-while True:
+for _ in range(300):
     t = time.time()
     x, y = math.cos(t), math.sin(t)
-    viewer.add_marker(type=const.GEOM_ARROW,
+    viewer.add_marker(type=mujoco.mjtGeom.mjGEOM_ARROW,
                       pos=np.array([0, 0, 1]),
                       label=" ",
                       mat=euler2mat([0, np.pi/2, t]),
@@ -51,3 +60,5 @@ while True:
     step += 1
     if step > 100 and os.getenv('TESTING') is not None:
         break
+
+viewer.close()
